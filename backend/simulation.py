@@ -29,10 +29,14 @@ class SimulationConfig:
     min_soc: float = 0.20               # Minimum State of Charge (20%)
     max_soc: float = 1.00               # Maximum State of Charge (100%)
     initial_soc: float = 0.50           # Starting SoC (50%)
-    # Delhi BSES/TPDDL Time-of-Day Tariff (₹/kWh)
-    peak_price: float = 8.00            # Peak electricity price (₹/kWh) - 2-6 PM, 10 PM-6 AM
-    off_peak_price: float = 5.00        # Off-peak electricity price (₹/kWh)
-    peak_hours: tuple = (14, 22)        # Peak pricing hours (2 PM - 10 PM in Delhi summer)
+    # Solar configuration
+    solar_capacity_kw: float = 5.0      # Solar panel capacity (3kW or 5kW)
+    weather_mode: str = "sunny"         # Weather: "sunny" (100%) or "cloudy" (50%)
+    # Delhi BSES/TPDDL Time-of-Day Tariff (₹/kWh) - 3-tier pricing
+    off_peak_price: float = 4.00        # Off-peak (00:00-06:00): ₹4.00/kWh
+    standard_price: float = 6.50        # Standard (06:00-18:00): ₹6.50/kWh
+    peak_price: float = 8.50            # Peak (18:00-22:00): ₹8.50/kWh
+    peak_hours: tuple = (18, 22)        # Peak pricing hours (6 PM - 10 PM)
 
 
 class MicrogridSimulator:
@@ -59,14 +63,23 @@ class MicrogridSimulator:
         Generate realistic solar PV generation profile.
         
         Uses a Gaussian-like curve centered at solar noon (12:00-13:00)
-        with zero generation during night hours. Peak generation ~7 kW.
+        with zero generation during night hours. Scales by solar_capacity_kw
+        and weather_mode (sunny=100%, cloudy=50%).
         """
         # Solar irradiance follows a bell curve during daylight hours
         # Peak at hour 12 (noon), zero before 6 AM and after 7 PM
         solar = np.zeros(24)
+        # Scale peak by solar capacity (base profile assumes 5kW system produces ~7kW peak)
+        capacity_factor = self.config.solar_capacity_kw / 5.0
+        peak_generation = 7.0 * capacity_factor
+        
         for h in range(6, 19):  # Daylight hours: 6 AM to 6 PM
             # Gaussian curve: peak at hour 12, sigma = 3
-            solar[h] = 7.0 * np.exp(-0.5 * ((h - 12) / 3) ** 2)
+            solar[h] = peak_generation * np.exp(-0.5 * ((h - 12) / 3) ** 2)
+        
+        # Apply weather efficiency factor
+        weather_efficiency = 1.0 if self.config.weather_mode == "sunny" else 0.5
+        solar = solar * weather_efficiency
         
         # Add some realistic variation (±10%)
         np.random.seed(42)  # Reproducible results
@@ -102,14 +115,23 @@ class MicrogridSimulator:
     
     def _generate_price_profile(self) -> None:
         """
-        Generate time-of-use electricity pricing.
+        Generate 3-tier time-of-use electricity pricing for Delhi.
         
-        Peak hours (10 AM - 6 PM): Higher price to discourage grid usage
-        Off-peak hours: Lower price for charging and baseline operation
+        Off-Peak (00:00-06:00): ₹4.00/kWh - Night rates
+        Standard (06:00-18:00): ₹6.50/kWh - Daytime rates
+        Peak (18:00-22:00): ₹8.50/kWh - Evening peak rates
         """
-        price = np.full(24, self.config.off_peak_price)
-        peak_start, peak_end = self.config.peak_hours
-        price[peak_start:peak_end] = self.config.peak_price
+        price = np.zeros(24)
+        
+        for h in range(24):
+            if h < 6:  # Off-peak: 00:00-06:00
+                price[h] = self.config.off_peak_price
+            elif h < 18:  # Standard: 06:00-18:00
+                price[h] = self.config.standard_price
+            elif h < 22:  # Peak: 18:00-22:00
+                price[h] = self.config.peak_price
+            else:  # Off-peak: 22:00-24:00
+                price[h] = self.config.off_peak_price
         
         self.price_profile = price
     

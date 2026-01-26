@@ -88,9 +88,12 @@ input[type="number"]::-webkit-inner-spin-button {
 
 /* Animation utilities */
 @keyframes pulse-slow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -125,8 +128,109 @@ input[type="number"]::-webkit-inner-spin-button {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Enhanced glassmorphism */
+.glass-premium {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Glow effects */
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor;
+  }
+
+  50% {
+    box-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Energy flow arrow colors */
+.energy-solar {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+
+.energy-battery {
+  color: #3b82f6;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+.energy-grid {
+  color: #ef4444;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+/* Custom slider variants */
+input[type="range"].slider-solar::-webkit-slider-thumb {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.5);
+}
+
+input[type="range"].slider-battery::-webkit-slider-thumb {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.5);
+}
+
+/* Hover lift effect */
+.hover-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Card shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-border {
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Battery level gradient */
+.battery-gradient-green {
+  background: linear-gradient(to top, #16a34a, #22c55e, #4ade80);
+}
+
+.battery-gradient-yellow {
+  background: linear-gradient(to top, #ca8a04, #eab308, #facc15);
+}
+
+.battery-gradient-red {
+  background: linear-gradient(to top, #b91c1c, #ef4444, #f87171);
+}
+
+/* Smooth transition for theme changes */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }

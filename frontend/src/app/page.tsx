@@ -1,12 +1,11 @@
 /**
  * Microgrid Digital Twin - Main Page
  * ===================================
- * Entry point for the application.
- * Renders the Dashboard component.
+ * Redirects to VLabs Simulation page.
  */
 
-import Dashboard from "@/components/Dashboard";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <Dashboard />;
+  redirect("/vlabs-simulation");
 }

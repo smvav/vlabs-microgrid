@@ -341,31 +341,32 @@ export default function MicrogridAnimation({
                     // DRAW POWER LINES WITH ELECTRONS
                     // ========================================
 
-                    // Define paths
+                    // Define paths with documentation-specified colors
+                    // Yellow = Solar, Blue = Battery, Red = Grid (high cost warning)
                     const paths: { [key: string]: { start: { x: number; y: number }; end: { x: number; y: number }; active: boolean; color: number[] } } = {
                         "solar-battery": {
                             start: { x: solarPos.x + 45, y: solarPos.y },
                             end: { x: batteryPos.x - 35, y: batteryPos.y },
                             active: solarPower > 0.1 && isCharging,
-                            color: [250, 200, 50],
+                            color: [251, 191, 36], // Yellow - Solar charging battery
                         },
                         "battery-load": {
                             start: { x: batteryPos.x + 35, y: batteryPos.y },
                             end: { x: housePos.x - 40, y: housePos.y },
                             active: isDischarging,
-                            color: [34, 197, 94],
+                            color: [59, 130, 246], // Blue - Battery powering load
                         },
                         "solar-load": {
                             start: { x: solarPos.x + 45, y: solarPos.y - 20 },
                             end: { x: housePos.x - 40, y: housePos.y - 20 },
                             active: solarPower > 0.1 && !isCharging,
-                            color: [250, 200, 50],
+                            color: [251, 191, 36], // Yellow - Solar powering load
                         },
                         "grid-load": {
                             start: { x: gridPos.x, y: gridPos.y - 40 },
                             end: { x: housePos.x, y: housePos.y + 45 },
                             active: gridActive,
-                            color: [168, 85, 247],
+                            color: [239, 68, 68], // Red - Grid usage (expensive)
                         },
                     };
 

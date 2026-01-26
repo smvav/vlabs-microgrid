@@ -1,17 +1,15 @@
 "use client";
 
 /**
- * Microgrid 3D Scene Component
- * ============================
- * Three.js-powered 3D visualization of the microgrid system.
+ * Microgrid 3D Scene Component - Enhanced Realistic Version
+ * =========================================================
+ * Three.js-powered 3D visualization with game-like graphics.
  * 
  * Features:
- * - Rotating sun with animated rays
- * - Solar panel array
- * - Battery storage with dynamic charge level
- * - House/load with glowing windows
- * - Power transmission tower (grid)
- * - Animated energy flow particles
+ * - Realistic 3D models for all components
+ * - Animated wired connections with flowing current
+ * - Battery positioned in front of house
+ * - Dynamic current flow based on simulation data
  */
 
 import React, { useRef, useEffect } from "react";
@@ -42,329 +40,441 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         batteryLevel: THREE.Mesh;
         house: THREE.Group;
         grid: THREE.Group;
-        particles: THREE.Points[];
+        wires: THREE.Group;
+        currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; speed: number; active: boolean }[];
         animationId: number;
+        time: number;
     } | null>(null);
 
     useEffect(() => {
         if (!containerRef.current) return;
 
-        // Scene setup
+        // Scene setup with dark gradient background
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a1a);
+        const bgColor = new THREE.Color(0x0a0a1a);
+        scene.background = bgColor;
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
 
-        // Camera
+        // Camera - positioned for better view
         const camera = new THREE.PerspectiveCamera(
-            45,
+            50,
             containerRef.current.clientWidth / containerRef.current.clientHeight,
             0.1,
             1000
         );
-        camera.position.set(0, 8, 18);
+        camera.position.set(0, 10, 20);
         camera.lookAt(0, 0, 0);
 
-        // Renderer
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        // High-quality Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.5;
         containerRef.current.appendChild(renderer.domElement);
 
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        // ========================================
+        // LIGHTING SETUP - Realistic
+        // ========================================
+        const ambientLight = new THREE.AmbientLight(0x6688cc, 0.3);
         scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 10, 7);
-        directionalLight.castShadow = true;
-        scene.add(directionalLight);
+        const sunLight = new THREE.DirectionalLight(0xffffee, 1.5);
+        sunLight.position.set(-8, 12, -5);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 4096;
+        sunLight.shadow.mapSize.height = 4096;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 50;
+        sunLight.shadow.camera.left = -20;
+        sunLight.shadow.camera.right = 20;
+        sunLight.shadow.camera.top = 20;
+        sunLight.shadow.camera.bottom = -20;
+        scene.add(sunLight);
 
-        // Ground plane
-        const groundGeometry = new THREE.PlaneGeometry(30, 20);
+        // Hemisphere light for natural outdoor lighting
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c5c, 0.4);
+        scene.add(hemiLight);
+
+        // ========================================
+        // GROUND - Realistic grass/terrain
+        // ========================================
+        const groundGeometry = new THREE.PlaneGeometry(40, 30, 50, 50);
         const groundMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a2630,
-            roughness: 0.8,
+            color: 0x2d5a2d,
+            roughness: 0.9,
+            metalness: 0.0,
         });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -2;
+        ground.position.y = -0.1;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Grid helper
-        const gridHelper = new THREE.GridHelper(20, 20, 0x2a3a4a, 0x1a2a3a);
-        gridHelper.position.y = -1.99;
-        scene.add(gridHelper);
+        // Concrete pad under components
+        const padGeometry = new THREE.BoxGeometry(25, 0.15, 18);
+        const padMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7 });
+        const pad = new THREE.Mesh(padGeometry, padMaterial);
+        pad.position.y = 0;
+        pad.receiveShadow = true;
+        scene.add(pad);
 
         // ========================================
-        // CREATE SUN
+        // SUN - Realistic glowing sphere
         // ========================================
         const sun = new THREE.Group();
-        sun.position.set(-7, 6, -3);
+        sun.position.set(-10, 10, -8);
 
-        // Sun core
-        const sunGeometry = new THREE.SphereGeometry(1.2, 32, 32);
-        const sunMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffdd44,
-        });
-        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
-        sun.add(sunMesh);
+        const sunCore = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0xffee55 })
+        );
+        sun.add(sunCore);
 
-        // Sun glow
-        const glowGeometry = new THREE.SphereGeometry(1.5, 32, 32);
-        const glowMaterial = new THREE.MeshBasicMaterial({
+        // Sun corona glow
+        const coronaGeo = new THREE.SphereGeometry(2.5, 32, 32);
+        const coronaMat = new THREE.MeshBasicMaterial({
             color: 0xffaa00,
             transparent: true,
             opacity: 0.3,
+            side: THREE.BackSide,
         });
-        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-        sun.add(glowMesh);
+        sun.add(new THREE.Mesh(coronaGeo, coronaMat));
 
-        // Sun rays
-        for (let i = 0; i < 8; i++) {
-            const rayGeometry = new THREE.BoxGeometry(0.1, 1.5, 0.1);
-            const rayMaterial = new THREE.MeshBasicMaterial({ color: 0xffcc33 });
-            const ray = new THREE.Mesh(rayGeometry, rayMaterial);
-            ray.position.y = 2;
-            ray.rotation.z = (i / 8) * Math.PI * 2;
-            sun.add(ray);
-        }
+        // Outer glow
+        const outerGlow = new THREE.Mesh(
+            new THREE.SphereGeometry(3.5, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.1, side: THREE.BackSide })
+        );
+        sun.add(outerGlow);
 
         scene.add(sun);
 
+        // Sun label
+        const sunLabel = createLabel("☀️ SUN", 0xffdd44);
+        sunLabel.position.set(-10, 14, -8);
+        scene.add(sunLabel);
+
         // ========================================
-        // CREATE SOLAR PANEL
+        // SOLAR PANEL - Realistic with frame and cells
         // ========================================
         const solarPanel = new THREE.Group();
-        solarPanel.position.set(-5, -1, 0);
+        solarPanel.position.set(-8, 0, 2);
+
+        // Metal support structure
+        const supportMat = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.8, roughness: 0.3 });
+
+        // Vertical poles
+        const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8);
+        const pole1 = new THREE.Mesh(poleGeo, supportMat);
+        pole1.position.set(-1.2, 1.25, 0);
+        pole1.castShadow = true;
+        solarPanel.add(pole1);
+
+        const pole2 = new THREE.Mesh(poleGeo, supportMat);
+        pole2.position.set(1.2, 1.25, 0);
+        pole2.castShadow = true;
+        solarPanel.add(pole2);
 
         // Panel frame
-        const frameGeometry = new THREE.BoxGeometry(3, 0.1, 2);
-        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x333344 });
-        const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-        frame.rotation.x = -Math.PI / 6;
-        frame.position.y = 1;
+        const frameGeo = new THREE.BoxGeometry(4, 0.15, 2.5);
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x222233, metalness: 0.5, roughness: 0.5 });
+        const frame = new THREE.Mesh(frameGeo, frameMat);
+        frame.position.set(0, 2.8, 0);
+        frame.rotation.x = -0.5;
         frame.castShadow = true;
         solarPanel.add(frame);
 
-        // Solar cells
-        const cellGeometry = new THREE.BoxGeometry(0.65, 0.05, 0.45);
-        const cellMaterial = new THREE.MeshStandardMaterial({
+        // Solar cells with glossy blue
+        const cellMat = new THREE.MeshStandardMaterial({
             color: 0x1a3a6a,
-            metalness: 0.8,
-            roughness: 0.2,
+            metalness: 0.9,
+            roughness: 0.1,
+            envMapIntensity: 1.0,
         });
-        for (let row = 0; row < 3; row++) {
-            for (let col = 0; col < 4; col++) {
-                const cell = new THREE.Mesh(cellGeometry, cellMaterial);
-                cell.position.set(-1.1 + col * 0.75, 1.06, -0.5 + row * 0.55);
-                cell.rotation.x = -Math.PI / 6;
+
+        for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 6; col++) {
+                const cell = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.08, 0.35), cellMat);
+                cell.position.set(-1.5 + col * 0.6, 2.88, -0.6 + row * 0.5);
+                cell.rotation.x = -0.5;
                 solarPanel.add(cell);
             }
         }
 
-        // Panel stand
-        const standGeometry = new THREE.BoxGeometry(0.1, 1.5, 0.1);
-        const standMaterial = new THREE.MeshStandardMaterial({ color: 0x555566 });
-        const stand = new THREE.Mesh(standGeometry, standMaterial);
-        stand.position.set(0, 0.25, 0);
-        solarPanel.add(stand);
-
         scene.add(solarPanel);
 
-        // ========================================
-        // CREATE BATTERY
-        // ========================================
-        const battery = new THREE.Group();
-        battery.position.set(0, -1, 0);
-
-        // Battery case
-        const caseGeometry = new THREE.BoxGeometry(1.5, 2, 1);
-        const caseMaterial = new THREE.MeshStandardMaterial({
-            color: 0x2a3a4a,
-            metalness: 0.5,
-            roughness: 0.5,
-        });
-        const batteryCaseMesh = new THREE.Mesh(caseGeometry, caseMaterial);
-        batteryCaseMesh.position.y = 1;
-        batteryCaseMesh.castShadow = true;
-        battery.add(batteryCaseMesh);
-
-        // Battery level (dynamic)
-        const levelGeometry = new THREE.BoxGeometry(1.3, 1.8, 0.8);
-        const levelMaterial = new THREE.MeshStandardMaterial({
-            color: 0x22c55e,
-            transparent: true,
-            opacity: 0.8,
-        });
-        const batteryLevel = new THREE.Mesh(levelGeometry, levelMaterial);
-        batteryLevel.position.y = 0.1;
-        batteryLevel.scale.y = 0.5;
-        battery.add(batteryLevel);
-
-        // Battery terminal
-        const terminalGeometry = new THREE.BoxGeometry(0.5, 0.2, 0.3);
-        const terminalMaterial = new THREE.MeshStandardMaterial({ color: 0x666677 });
-        const terminal = new THREE.Mesh(terminalGeometry, terminalMaterial);
-        terminal.position.y = 2.1;
-        battery.add(terminal);
-
-        scene.add(battery);
+        const solarLabel = createLabel("⚡ SOLAR PANEL", 0xfbbf24);
+        solarLabel.position.set(-8, 5, 2);
+        scene.add(solarLabel);
 
         // ========================================
-        // CREATE HOUSE
+        // HOUSE - Detailed realistic house
         // ========================================
         const house = new THREE.Group();
-        house.position.set(5, -1, 0);
+        house.position.set(6, 0, 0);
 
-        // House body
-        const bodyGeometry = new THREE.BoxGeometry(3, 2, 2.5);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4a5568 });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 1;
-        body.castShadow = true;
-        house.add(body);
+        // Foundation
+        const foundationGeo = new THREE.BoxGeometry(5.5, 0.3, 4.5);
+        const foundationMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+        const foundation = new THREE.Mesh(foundationGeo, foundationMat);
+        foundation.position.y = 0.15;
+        foundation.castShadow = true;
+        foundation.receiveShadow = true;
+        house.add(foundation);
+
+        // Main walls
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc8, roughness: 0.6 });
+        const wallGeo = new THREE.BoxGeometry(5, 3, 4);
+        const walls = new THREE.Mesh(wallGeo, wallMat);
+        walls.position.y = 1.8;
+        walls.castShadow = true;
+        walls.receiveShadow = true;
+        house.add(walls);
 
         // Roof
-        const roofGeometry = new THREE.ConeGeometry(2.5, 1.5, 4);
-        const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-        const roof = new THREE.Mesh(roofGeometry, roofMaterial);
-        roof.position.y = 2.75;
-        roof.rotation.y = Math.PI / 4;
+        const roofShape = new THREE.Shape();
+        roofShape.moveTo(-3, 0);
+        roofShape.lineTo(0, 1.8);
+        roofShape.lineTo(3, 0);
+        roofShape.lineTo(-3, 0);
+
+        const roofExtrudeSettings = { depth: 4.5, bevelEnabled: false };
+        const roofGeo = new THREE.ExtrudeGeometry(roofShape, roofExtrudeSettings);
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7 });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.rotation.y = Math.PI / 2;
+        roof.position.set(-2.25, 3.3, 0);
+        roof.castShadow = true;
         house.add(roof);
 
-        // Windows (will glow based on load)
-        const windowGeometry = new THREE.BoxGeometry(0.5, 0.6, 0.1);
-        const windowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffee88,
-            transparent: true,
-            opacity: 0.8,
+        // Windows (glowing)
+        const windowMat = new THREE.MeshBasicMaterial({ color: 0xffffcc, transparent: true, opacity: 0.9 });
+        const windowFrame = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+        // Front windows
+        [-0.8, 0.8].forEach(x => {
+            const win = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.1), windowMat);
+            win.position.set(x, 2.2, 2.05);
+            house.add(win);
+
+            const winFrame = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.05), windowFrame);
+            winFrame.position.set(x, 2.2, 2.0);
+            house.add(winFrame);
         });
 
-        const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
-        window1.position.set(-0.6, 1.2, 1.26);
-        house.add(window1);
-
-        const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
-        window2.position.set(0.6, 1.2, 1.26);
-        house.add(window2);
-
         // Door
-        const doorGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.1);
-        const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x5c3d2e });
-        const door = new THREE.Mesh(doorGeometry, doorMaterial);
-        door.position.set(0, 0.6, 1.26);
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.5 });
+        const doorGeo = new THREE.BoxGeometry(0.9, 1.6, 0.1);
+        const door = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(0, 1.1, 2.05);
+        door.castShadow = true;
         house.add(door);
+
+        // Door handle
+        const handleGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const handleMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 });
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.position.set(0.3, 1.1, 2.12);
+        house.add(handle);
+
+        // Chimney
+        const chimneyGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
+        const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8 });
+        const chimney = new THREE.Mesh(chimneyGeo, chimneyMat);
+        chimney.position.set(1.5, 4.5, 0);
+        chimney.castShadow = true;
+        house.add(chimney);
 
         scene.add(house);
 
+        const houseLabel = createLabel("🏠 HOUSE", 0x60a5fa);
+        houseLabel.position.set(6, 6.5, 0);
+        scene.add(houseLabel);
+
         // ========================================
-        // CREATE GRID TOWER
+        // BATTERY - In front of house, realistic Tesla-style
+        // ========================================
+        const battery = new THREE.Group();
+        battery.position.set(3, 0, 3); // In front of house
+
+        // Battery cabinet
+        const cabinetGeo = new THREE.BoxGeometry(1.2, 2.2, 0.8);
+        const cabinetMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            metalness: 0.7,
+            roughness: 0.3
+        });
+        const cabinet = new THREE.Mesh(cabinetGeo, cabinetMat);
+        cabinet.position.y = 1.1;
+        cabinet.castShadow = true;
+        battery.add(cabinet);
+
+        // Battery front panel with LED strip
+        const frontPanel = new THREE.Mesh(
+            new THREE.BoxGeometry(1.0, 1.8, 0.05),
+            new THREE.MeshStandardMaterial({ color: 0x2a2a3e, metalness: 0.5 })
+        );
+        frontPanel.position.set(0, 1.1, 0.42);
+        battery.add(frontPanel);
+
+        // Battery level indicator (dynamic)
+        const levelGeo = new THREE.BoxGeometry(0.8, 1.5, 0.02);
+        const levelMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.9 });
+        const batteryLevel = new THREE.Mesh(levelGeo, levelMat);
+        batteryLevel.position.set(0, 0.9, 0.45);
+        batteryLevel.scale.y = 0.5;
+        battery.add(batteryLevel);
+
+        // Tesla-style logo/brand area
+        const logoGeo = new THREE.BoxGeometry(0.6, 0.15, 0.03);
+        const logoMat = new THREE.MeshBasicMaterial({ color: 0x888888 });
+        const logo = new THREE.Mesh(logoGeo, logoMat);
+        logo.position.set(0, 2.05, 0.44);
+        battery.add(logo);
+
+        scene.add(battery);
+
+        const batteryLabel = createLabel("🔋 BATTERY", 0x22c55e);
+        batteryLabel.position.set(3, 4, 3);
+        scene.add(batteryLabel);
+
+        // ========================================
+        // POWER GRID - Realistic transmission tower
         // ========================================
         const grid = new THREE.Group();
-        grid.position.set(0, -1, 5);
+        grid.position.set(-3, 0, -5);
 
-        // Tower structure
-        const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x666677 });
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0x666677, metalness: 0.6, roughness: 0.4 });
 
-        // Main poles
-        const poleGeometry = new THREE.BoxGeometry(0.1, 4, 0.1);
-        const pole1 = new THREE.Mesh(poleGeometry, towerMaterial);
-        pole1.position.set(-0.5, 2, 0);
-        grid.add(pole1);
+        // Tower legs (tapered)
+        const createLeg = (x: number, z: number) => {
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.15, 6, 8);
+            const leg = new THREE.Mesh(legGeo, towerMat);
+            leg.position.set(x, 3, z);
+            leg.castShadow = true;
+            return leg;
+        };
+        grid.add(createLeg(-0.6, -0.4));
+        grid.add(createLeg(0.6, -0.4));
+        grid.add(createLeg(-0.6, 0.4));
+        grid.add(createLeg(0.6, 0.4));
 
-        const pole2 = new THREE.Mesh(poleGeometry, towerMaterial);
-        pole2.position.set(0.5, 2, 0);
-        grid.add(pole2);
+        // Cross arms
+        const armGeo = new THREE.BoxGeometry(3, 0.12, 0.12);
+        const arm1 = new THREE.Mesh(armGeo, towerMat);
+        arm1.position.set(0, 5.5, 0);
+        grid.add(arm1);
 
-        // Cross beams
-        const crossGeometry = new THREE.BoxGeometry(1.2, 0.1, 0.1);
-        const cross1 = new THREE.Mesh(crossGeometry, towerMaterial);
-        cross1.position.set(0, 3.5, 0);
-        grid.add(cross1);
+        const arm2 = new THREE.Mesh(armGeo, towerMat);
+        arm2.position.set(0, 4.5, 0);
+        grid.add(arm2);
 
-        const cross2 = new THREE.Mesh(crossGeometry, towerMaterial);
-        cross2.position.set(0, 2.5, 0);
-        grid.add(cross2);
+        // Insulators
+        const insulatorMat = new THREE.MeshStandardMaterial({ color: 0x4488aa, roughness: 0.3 });
+        [-1.2, 0, 1.2].forEach(x => {
+            const insulator = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.3, 8), insulatorMat);
+            insulator.position.set(x, 5.65, 0);
+            grid.add(insulator);
+        });
 
-        // Power lines
-        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x888899 });
-        for (let i = 0; i < 3; i++) {
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(-0.5 + i * 0.5, 3.5, 0),
-                new THREE.Vector3(-0.5 + i * 0.5, 3.5, -3),
-            ]);
-            const line = new THREE.Line(lineGeometry, lineMaterial);
-            grid.add(line);
-        }
+        // Power lines (cables)
+        const cableMat = new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 2 });
+        [-1.2, 0, 1.2].forEach(x => {
+            const points = [
+                new THREE.Vector3(x, 5.8, 0),
+                new THREE.Vector3(x, 5.5, -4),
+            ];
+            const cableGeo = new THREE.BufferGeometry().setFromPoints(points);
+            grid.add(new THREE.Line(cableGeo, cableMat));
+        });
 
         scene.add(grid);
 
+        const gridLabel = createLabel("⚡ POWER GRID", 0xa855f7);
+        gridLabel.position.set(-3, 8, -5);
+        scene.add(gridLabel);
+
         // ========================================
-        // CREATE ENERGY FLOW PARTICLES
+        // WIRING - Connect all components
         // ========================================
-        const particles: THREE.Points[] = [];
+        const wires = new THREE.Group();
+        const wireMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5, roughness: 0.5 });
 
-        const createParticles = (start: THREE.Vector3, end: THREE.Vector3, color: number) => {
-            const particleCount = 20;
-            const positions = new Float32Array(particleCount * 3);
-            const colors = new Float32Array(particleCount * 3);
-
-            const particleColor = new THREE.Color(color);
-
-            for (let i = 0; i < particleCount; i++) {
-                const t = i / particleCount;
-                positions[i * 3] = start.x + (end.x - start.x) * t;
-                positions[i * 3 + 1] = start.y + (end.y - start.y) * t + Math.sin(t * Math.PI) * 0.5;
-                positions[i * 3 + 2] = start.z + (end.z - start.z) * t;
-
-                colors[i * 3] = particleColor.r;
-                colors[i * 3 + 1] = particleColor.g;
-                colors[i * 3 + 2] = particleColor.b;
-            }
-
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-            const material = new THREE.PointsMaterial({
-                size: 0.15,
-                vertexColors: true,
-                transparent: true,
-                opacity: 0.8,
-            });
-
-            return new THREE.Points(geometry, material);
+        // Create wire as tube along path
+        const createWire = (points: THREE.Vector3[], color: number = 0x333333) => {
+            const curve = new THREE.CatmullRomCurve3(points);
+            const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.05, 8, false);
+            const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.6 });
+            const wire = new THREE.Mesh(tubeGeo, mat);
+            wire.castShadow = true;
+            return wire;
         };
 
-        // Solar -> Battery particles (yellow)
-        const solarToBattery = createParticles(
-            new THREE.Vector3(-4, 0, 0),
-            new THREE.Vector3(-0.5, 0, 0),
-            0xffcc00
-        );
-        scene.add(solarToBattery);
-        particles.push(solarToBattery);
+        // Solar Panel → Battery wire
+        const solarToBatteryPoints = [
+            new THREE.Vector3(-6, 2, 2),
+            new THREE.Vector3(-4, 1.5, 2.5),
+            new THREE.Vector3(-1, 1, 3),
+            new THREE.Vector3(2, 1, 3),
+        ];
+        wires.add(createWire(solarToBatteryPoints, 0xffcc00));
 
-        // Battery -> House particles (green)
-        const batteryToHouse = createParticles(
-            new THREE.Vector3(0.5, 0, 0),
-            new THREE.Vector3(4, 0, 0),
-            0x22c55e
-        );
-        scene.add(batteryToHouse);
-        particles.push(batteryToHouse);
+        // Battery → House wire
+        const batteryToHousePoints = [
+            new THREE.Vector3(4, 1, 3),
+            new THREE.Vector3(5, 1.5, 2),
+            new THREE.Vector3(5.5, 1.5, 1),
+        ];
+        wires.add(createWire(batteryToHousePoints, 0x22cc55));
 
-        // Grid -> House particles (purple)
-        const gridToHouse = createParticles(
-            new THREE.Vector3(0, 0, 4),
-            new THREE.Vector3(4, 0, 0),
-            0xa855f7
-        );
-        scene.add(gridToHouse);
-        particles.push(gridToHouse);
+        // Grid → House wire
+        const gridToHousePoints = [
+            new THREE.Vector3(-2, 3, -4),
+            new THREE.Vector3(0, 2.5, -2),
+            new THREE.Vector3(3, 2, 0),
+            new THREE.Vector3(5, 1.5, 1),
+        ];
+        wires.add(createWire(gridToHousePoints, 0x9955ff));
 
-        // Store refs
+        scene.add(wires);
+
+        // ========================================
+        // ANIMATED CURRENT PARTICLES
+        // ========================================
+        const currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; speed: number; active: boolean; offset: number }[] = [];
+
+        const createCurrentParticles = (path: THREE.Vector3[], color: number, count: number = 15) => {
+            const positions = new Float32Array(count * 3);
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const mat = new THREE.PointsMaterial({
+                color,
+                size: 0.2,
+                transparent: true,
+                opacity: 0.9,
+                blending: THREE.AdditiveBlending,
+            });
+
+            const points = new THREE.Points(geo, mat);
+            scene.add(points);
+
+            return { mesh: points, path, speed: 0.015, active: false, offset: Math.random() };
+        };
+
+        // Solar to Battery current
+        currentParticles.push(createCurrentParticles(solarToBatteryPoints, 0xffcc00));
+        // Battery to House current
+        currentParticles.push(createCurrentParticles(batteryToHousePoints, 0x22ff55));
+        // Grid to House current
+        currentParticles.push(createCurrentParticles(gridToHousePoints, 0xaa55ff));
+
+        // ========================================
+        // STORE REFS
+        // ========================================
         sceneRef.current = {
             scene,
             camera,
@@ -375,26 +485,44 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             batteryLevel,
             house,
             grid,
-            particles,
+            wires,
+            currentParticles,
             animationId: 0,
+            time: 0,
         };
 
-        // Animation loop
-        let time = 0;
+        // ========================================
+        // ANIMATION LOOP
+        // ========================================
         const animate = () => {
-            sceneRef.current!.animationId = requestAnimationFrame(animate);
-            time += 0.02;
+            if (!sceneRef.current) return;
+            sceneRef.current.animationId = requestAnimationFrame(animate);
+            sceneRef.current.time += 0.016;
+            const time = sceneRef.current.time;
 
-            // Rotate sun rays
-            sun.rotation.z = time * 0.5;
+            // Rotate sun glow
+            sun.rotation.y = time * 0.1;
 
-            // Animate particles
-            particles.forEach((p) => {
-                const positions = p.geometry.attributes.position.array as Float32Array;
-                for (let i = 0; i < positions.length / 3; i++) {
-                    positions[i * 3 + 1] += Math.sin(time * 3 + i) * 0.002;
+            // Animate current particles along paths
+            currentParticles.forEach((particle, idx) => {
+                if (!particle.active) {
+                    particle.mesh.visible = false;
+                    return;
                 }
-                p.geometry.attributes.position.needsUpdate = true;
+                particle.mesh.visible = true;
+
+                const positions = particle.mesh.geometry.attributes.position.array as Float32Array;
+                const curve = new THREE.CatmullRomCurve3(particle.path);
+                const particleCount = positions.length / 3;
+
+                for (let i = 0; i < particleCount; i++) {
+                    const t = ((time * particle.speed * 30 + particle.offset + i / particleCount) % 1);
+                    const point = curve.getPoint(t);
+                    positions[i * 3] = point.x;
+                    positions[i * 3 + 1] = point.y + Math.sin(time * 5 + i) * 0.05;
+                    positions[i * 3 + 2] = point.z;
+                }
+                particle.mesh.geometry.attributes.position.needsUpdate = true;
             });
 
             renderer.render(scene, camera);
@@ -427,46 +555,75 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
     useEffect(() => {
         if (!sceneRef.current) return;
 
-        const { sun, batteryLevel, particles } = sceneRef.current;
+        const { sun, batteryLevel, currentParticles } = sceneRef.current;
         const isDaytime = currentData.hour >= 6 && currentData.hour <= 18;
         const solarIntensity = currentData.solar_generation / 7;
         const batterySoC = currentData.battery_soc / 100;
 
-        // Update sun visibility and position
-        sun.visible = isDaytime && solarIntensity > 0.1;
-        if (sun.visible) {
-            (sun.children[0] as THREE.Mesh).material = new THREE.MeshBasicMaterial({
-                color: new THREE.Color().setHSL(0.12, 1, 0.5 + solarIntensity * 0.3),
-            });
-        }
+        // Update sun visibility
+        sun.visible = isDaytime;
 
         // Update battery level
         batteryLevel.scale.y = Math.max(0.1, batterySoC);
-        batteryLevel.position.y = 0.1 + (batterySoC - 0.5) * 0.9;
+        batteryLevel.position.y = 0.35 + batterySoC * 0.75;
 
-        // Update battery color based on SoC
+        // Battery color based on SoC
         let batteryColor = 0x22c55e; // Green
         if (batterySoC < 0.3) batteryColor = 0xef4444; // Red
         else if (batterySoC < 0.6) batteryColor = 0xeab308; // Yellow
+        (batteryLevel.material as THREE.MeshBasicMaterial).color.setHex(batteryColor);
 
-        (batteryLevel.material as THREE.MeshStandardMaterial).color.setHex(batteryColor);
-
-        // Update particle visibility based on energy flow
+        // Activate current flows based on simulation data
         const isCharging = currentData.battery_charge > 0;
         const isDischarging = currentData.battery_discharge > 0;
-        const gridActive = currentData.grid_usage > 0;
+        const gridActive = currentData.grid_usage > 0.1;
 
-        particles[0].visible = isDaytime && solarIntensity > 0.1 && (isCharging || !isDischarging);
-        particles[1].visible = isDischarging;
-        particles[2].visible = gridActive;
+        // Solar to Battery (when solar is generating and battery is charging)
+        currentParticles[0].active = isDaytime && solarIntensity > 0.1 && isCharging;
+        // Battery to House (when battery is discharging)
+        currentParticles[1].active = isDischarging;
+        // Grid to House (when grid is being used)
+        currentParticles[2].active = gridActive;
 
     }, [currentData]);
 
     return (
         <div
             ref={containerRef}
-            className="w-full h-[350px] bg-slate-900/50"
+            className="w-full h-[350px] bg-gradient-to-b from-slate-900 to-slate-950 rounded-lg"
             style={{ touchAction: 'none' }}
         />
     );
+}
+
+// Helper function to create text labels
+function createLabel(text: string, color: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d')!;
+    canvas.width = 512;
+    canvas.height = 128;
+
+    // Background
+    context.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    context.beginPath();
+    context.roundRect(0, 0, 512, 128, 20);
+    context.fill();
+
+    // Border
+    context.strokeStyle = `#${color.toString(16).padStart(6, '0')}`;
+    context.lineWidth = 4;
+    context.stroke();
+
+    // Text
+    context.font = 'bold 48px Arial';
+    context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, 256, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.scale.set(4, 1, 1);
+    return sprite;
 }

@@ -49,17 +49,33 @@ class SimulationRequest(BaseModel):
         le=100.0,
         description="Battery storage capacity in kWh (1-100)"
     )
-    peak_price: Optional[float] = Field(
-        default=8.00,
+    solar_capacity_kw: Optional[float] = Field(
+        default=5.0,
         ge=3.0,
-        le=15.0,
-        description="Peak hour electricity price in ₹/kWh (Delhi BSES rates)"
+        le=7.0,
+        description="Solar panel capacity in kW (3-7)"
+    )
+    weather_mode: Optional[str] = Field(
+        default="sunny",
+        description="Weather mode: 'sunny' (100% efficiency) or 'cloudy' (50% efficiency)"
     )
     off_peak_price: Optional[float] = Field(
-        default=5.00,
+        default=4.00,
         ge=2.0,
         le=10.0,
-        description="Off-peak electricity price in ₹/kWh"
+        description="Off-peak electricity price in ₹/kWh (00:00-06:00)"
+    )
+    standard_price: Optional[float] = Field(
+        default=6.50,
+        ge=3.0,
+        le=12.0,
+        description="Standard electricity price in ₹/kWh (06:00-18:00)"
+    )
+    peak_price: Optional[float] = Field(
+        default=8.50,
+        ge=5.0,
+        le=15.0,
+        description="Peak hour electricity price in ₹/kWh (18:00-22:00)"
     )
     initial_soc: Optional[float] = Field(
         default=0.50,
@@ -71,9 +87,12 @@ class SimulationRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "battery_capacity_kwh": 15.0,
-                "peak_price": 8.00,
-                "off_peak_price": 5.00,
+                "battery_capacity_kwh": 10.0,
+                "solar_capacity_kw": 5.0,
+                "weather_mode": "sunny",
+                "off_peak_price": 4.00,
+                "standard_price": 6.50,
+                "peak_price": 8.50,
                 "initial_soc": 0.50
             }
         }
@@ -111,8 +130,11 @@ async def run_simulation(request: SimulationRequest = None):
         # Create configuration from request
         config = SimulationConfig(
             battery_capacity_kwh=request.battery_capacity_kwh,
-            peak_price=request.peak_price,
+            solar_capacity_kw=request.solar_capacity_kw,
+            weather_mode=request.weather_mode,
             off_peak_price=request.off_peak_price,
+            standard_price=request.standard_price,
+            peak_price=request.peak_price,
             initial_soc=request.initial_soc
         )
         

@@ -99,8 +99,12 @@ export default function VLabsSimulation() {
     // Simulation parameters
     const [batteryCapacity, setBatteryCapacity] = useState(10);
     const [initialSoC, setInitialSoC] = useState(50);
-    const [peakPrice, setPeakPrice] = useState(8);
-    const [offPeakPrice, setOffPeakPrice] = useState(5);
+    const [solarCapacity, setSolarCapacity] = useState(5);
+    const [weatherMode, setWeatherMode] = useState<"sunny" | "cloudy">("sunny");
+    // 3-tier Delhi pricing
+    const [offPeakPrice, setOffPeakPrice] = useState(4);
+    const [standardPrice, setStandardPrice] = useState(6.5);
+    const [peakPrice, setPeakPrice] = useState(8.5);
 
     // Simulation state
     const [isLoading, setIsLoading] = useState(false);
@@ -133,8 +137,11 @@ export default function VLabsSimulation() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     battery_capacity_kwh: batteryCapacity,
-                    peak_price: peakPrice,
+                    solar_capacity_kw: solarCapacity,
+                    weather_mode: weatherMode,
                     off_peak_price: offPeakPrice,
+                    standard_price: standardPrice,
+                    peak_price: peakPrice,
                     initial_soc: initialSoC / 100,
                 }),
             });
@@ -388,10 +395,67 @@ export default function VLabsSimulation() {
                                 </h3>
 
                                 <div className="space-y-4">
+                                    {/* Solar Capacity */}
+                                    <div>
+                                        <label className="text-xs text-slate-400 flex justify-between">
+                                            <span className="flex items-center gap-1">
+                                                <Sun className="w-3 h-3 text-yellow-400" />
+                                                Solar Capacity
+                                            </span>
+                                            <span className="text-yellow-400">{solarCapacity} kW</span>
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="3"
+                                            max="7"
+                                            step="1"
+                                            value={solarCapacity}
+                                            onChange={(e) => setSolarCapacity(Number(e.target.value))}
+                                            className="w-full h-2 bg-gradient-to-r from-yellow-900 to-yellow-600 rounded-lg appearance-none cursor-pointer mt-1"
+                                        />
+                                        <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                                            <span>3kW</span>
+                                            <span>5kW</span>
+                                            <span>7kW</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Weather Toggle */}
+                                    <div>
+                                        <label className="text-xs text-slate-400 mb-2 block">Weather Mode</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => setWeatherMode("sunny")}
+                                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${weatherMode === "sunny"
+                                                    ? "bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-400 border border-yellow-500/50 shadow-lg shadow-yellow-500/20"
+                                                    : "bg-slate-700/50 text-slate-400 hover:bg-slate-700"
+                                                    }`}
+                                            >
+                                                <Sun className="w-4 h-4" />
+                                                Sunny
+                                            </button>
+                                            <button
+                                                onClick={() => setWeatherMode("cloudy")}
+                                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${weatherMode === "cloudy"
+                                                    ? "bg-gradient-to-r from-slate-500/30 to-blue-500/30 text-blue-400 border border-blue-500/50 shadow-lg shadow-blue-500/20"
+                                                    : "bg-slate-700/50 text-slate-400 hover:bg-slate-700"
+                                                    }`}
+                                            >
+                                                ☁️ Cloudy
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 mt-1 text-center">
+                                            {weatherMode === "sunny" ? "100% solar efficiency" : "50% solar efficiency"}
+                                        </p>
+                                    </div>
+
                                     {/* Battery Capacity */}
                                     <div>
                                         <label className="text-xs text-slate-400 flex justify-between">
-                                            <span>Battery Capacity</span>
+                                            <span className="flex items-center gap-1">
+                                                <Battery className="w-3 h-3 text-green-400" />
+                                                Battery Capacity
+                                            </span>
                                             <span className="text-emerald-400">{batteryCapacity} kWh</span>
                                         </label>
                                         <input
@@ -400,7 +464,7 @@ export default function VLabsSimulation() {
                                             max="20"
                                             value={batteryCapacity}
                                             onChange={(e) => setBatteryCapacity(Number(e.target.value))}
-                                            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer mt-1"
+                                            className="w-full h-2 bg-gradient-to-r from-emerald-900 to-emerald-600 rounded-lg appearance-none cursor-pointer mt-1"
                                         />
                                     </div>
 
@@ -420,36 +484,29 @@ export default function VLabsSimulation() {
                                         />
                                     </div>
 
-                                    {/* Peak Price */}
-                                    <div>
-                                        <label className="text-xs text-slate-400 flex justify-between">
-                                            <span>Peak Price (2PM-10PM)</span>
-                                            <span className="text-amber-400">₹{peakPrice}/kWh</span>
+                                    {/* 3-Tier Pricing Display */}
+                                    <div className="bg-slate-900/50 rounded-lg p-3">
+                                        <label className="text-xs text-slate-400 mb-2 block flex items-center gap-1">
+                                            <Zap className="w-3 h-3" />
+                                            Delhi ToD Tariff (₹/kWh)
                                         </label>
-                                        <input
-                                            type="range"
-                                            min="5"
-                                            max="15"
-                                            value={peakPrice}
-                                            onChange={(e) => setPeakPrice(Number(e.target.value))}
-                                            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer mt-1"
-                                        />
-                                    </div>
-
-                                    {/* Off-Peak Price */}
-                                    <div>
-                                        <label className="text-xs text-slate-400 flex justify-between">
-                                            <span>Off-Peak Price</span>
-                                            <span className="text-blue-400">₹{offPeakPrice}/kWh</span>
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="2"
-                                            max="10"
-                                            value={offPeakPrice}
-                                            onChange={(e) => setOffPeakPrice(Number(e.target.value))}
-                                            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer mt-1"
-                                        />
+                                        <div className="grid grid-cols-3 gap-2 text-xs">
+                                            <div className="text-center">
+                                                <div className="text-blue-400 font-bold">₹{offPeakPrice}</div>
+                                                <div className="text-slate-500 text-[10px]">Off-Peak</div>
+                                                <div className="text-slate-600 text-[9px]">00-06h</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-slate-300 font-bold">₹{standardPrice}</div>
+                                                <div className="text-slate-500 text-[10px]">Standard</div>
+                                                <div className="text-slate-600 text-[9px]">06-18h</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-rose-400 font-bold">₹{peakPrice}</div>
+                                                <div className="text-slate-500 text-[10px]">Peak</div>
+                                                <div className="text-slate-600 text-[9px]">18-22h</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -519,12 +576,14 @@ export default function VLabsSimulation() {
                                     </div>
                                 </div>
 
-                                <Microgrid3DScene
-                                    currentData={currentData}
-                                />
+                                <div className="relative overflow-hidden">
+                                    <Microgrid3DScene
+                                        currentData={currentData}
+                                    />
+                                </div>
 
-                                {/* Time Slider */}
-                                <div className="p-4 border-t border-slate-700/50">
+                                {/* Time Slider - positioned above 3D scene */}
+                                <div className="p-4 border-t border-slate-700/50 relative z-10 bg-slate-800/95">
                                     <div className="flex items-center gap-4">
                                         <span className="text-sm font-mono text-white w-16">
                                             {String(currentHour).padStart(2, "0")}:00
