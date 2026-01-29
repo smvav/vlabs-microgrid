@@ -84,18 +84,18 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
                 .tickValues([0, 6, 12, 18, 23])
                 .tickFormat(d => `${d}:00`)
             )
-            .attr("color", "#64748b")
-            .call(g => g.select(".domain").attr("stroke", "#334155"))
-            .call(g => g.selectAll(".tick line").attr("stroke", "#334155"))
-            .call(g => g.selectAll(".tick text").attr("fill", "#64748b").attr("font-size", "10px"));
+            .attr("color", "#6b7280")
+            .call(g => g.select(".domain").attr("stroke", "#d1d5db"))
+            .call(g => g.selectAll(".tick line").attr("stroke", "#d1d5db"))
+            .call(g => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", "10px"));
 
         // Y Axis
         g.append("g")
             .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d} kW`))
-            .attr("color", "#64748b")
-            .call(g => g.select(".domain").attr("stroke", "#334155"))
-            .call(g => g.selectAll(".tick line").attr("stroke", "#334155"))
-            .call(g => g.selectAll(".tick text").attr("fill", "#64748b").attr("font-size", "10px"));
+            .attr("color", "#6b7280")
+            .call(g => g.select(".domain").attr("stroke", "#d1d5db"))
+            .call(g => g.selectAll(".tick line").attr("stroke", "#d1d5db"))
+            .call(g => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", "10px"));
 
         // Peak hours background
         const peakStart = 14;
@@ -105,17 +105,17 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
             .attr("y", 0)
             .attr("width", x(peakEnd) - x(peakStart))
             .attr("height", height)
-            .attr("fill", "#ef4444")
-            .attr("opacity", 0.05);
+            .attr("fill", "#dc2626")
+            .attr("opacity", 0.08);
 
         // Peak label
         g.append("text")
             .attr("x", x((peakStart + peakEnd) / 2))
             .attr("y", 10)
             .attr("text-anchor", "middle")
-            .attr("fill", "#ef4444")
+            .attr("fill", "#dc2626")
             .attr("font-size", "9px")
-            .attr("opacity", 0.6)
+            .attr("opacity", 0.8)
             .text("Peak Hours");
 
         // Line generators
@@ -160,11 +160,11 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
             .attr("x2", "0%").attr("y2", "100%");
         solarGradient.append("stop")
             .attr("offset", "0%")
-            .attr("stop-color", "#fbbf24")
-            .attr("stop-opacity", 0.3);
+            .attr("stop-color", "#f59e0b")
+            .attr("stop-opacity", 0.2);
         solarGradient.append("stop")
             .attr("offset", "100%")
-            .attr("stop-color", "#fbbf24")
+            .attr("stop-color", "#f59e0b")
             .attr("stop-opacity", 0);
 
         // Draw lines
@@ -172,7 +172,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
         g.append("path")
             .datum(data)
             .attr("fill", "none")
-            .attr("stroke", "#fbbf24")
+            .attr("stroke", "#f59e0b")
             .attr("stroke-width", 2)
             .attr("d", solarLine);
 
@@ -180,7 +180,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
         g.append("path")
             .datum(data)
             .attr("fill", "none")
-            .attr("stroke", "#f43f5e")
+            .attr("stroke", "#dc2626")
             .attr("stroke-width", 2)
             .attr("d", loadLine);
 
@@ -188,7 +188,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
         g.append("path")
             .datum(data)
             .attr("fill", "none")
-            .attr("stroke", "#a855f7")
+            .attr("stroke", "#9333ea")
             .attr("stroke-width", 2)
             .attr("stroke-dasharray", "4,4")
             .attr("d", gridLine);
@@ -197,7 +197,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
         g.append("path")
             .datum(data)
             .attr("fill", "none")
-            .attr("stroke", "#22c55e")
+            .attr("stroke", "#16a34a")
             .attr("stroke-width", 2)
             .attr("stroke-dasharray", "2,2")
             .attr("d", batteryLine);
@@ -221,7 +221,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
                 .attr("cx", x(currentHour))
                 .attr("cy", y(currentData.solar_generation))
                 .attr("r", 5)
-                .attr("fill", "#fbbf24")
+                .attr("fill", "#f59e0b")
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 2);
 
@@ -230,7 +230,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
                 .attr("cx", x(currentHour))
                 .attr("cy", y(currentData.load_demand))
                 .attr("r", 5)
-                .attr("fill", "#f43f5e")
+                .attr("fill", "#dc2626")
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 2);
 
@@ -239,7 +239,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
                 .attr("cx", x(currentHour))
                 .attr("cy", y(currentData.grid_usage))
                 .attr("r", 5)
-                .attr("fill", "#a855f7")
+                .attr("fill", "#9333ea")
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 2);
         }
@@ -249,10 +249,10 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
             .attr("transform", `translate(${width - 100}, 5)`);
 
         const legendItems = [
-            { color: "#fbbf24", label: "Solar" },
-            { color: "#f43f5e", label: "Load" },
-            { color: "#a855f7", label: "Grid" },
-            { color: "#22c55e", label: "SoC" },
+            { color: "#f59e0b", label: "Solar" },
+            { color: "#dc2626", label: "Load" },
+            { color: "#9333ea", label: "Grid" },
+            { color: "#16a34a", label: "SoC" },
         ];
 
         legendItems.forEach((item, i) => {
@@ -270,7 +270,7 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
             legendRow.append("text")
                 .attr("x", 20)
                 .attr("y", 9)
-                .attr("fill", "#94a3b8")
+                .attr("fill", "#6b7280")
                 .attr("font-size", "9px")
                 .text(item.label);
         });
@@ -279,9 +279,9 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
 
     if (data.length === 0) {
         return (
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700/50 p-4">
-                <h3 className="text-sm font-semibold text-white mb-3">Energy Flow Chart</h3>
-                <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Energy Flow Chart</h3>
+                <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
                     Run simulation to see energy flow
                 </div>
             </div>
@@ -289,12 +289,12 @@ export default function EnergyFlowD3({ data, currentHour, strategy }: EnergyFlow
     }
 
     return (
-        <div ref={containerRef} className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700/50 p-4">
-            <h3 className="text-sm font-semibold text-white mb-3 flex items-center justify-between">
+        <div ref={containerRef} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center justify-between">
                 <span>24-Hour Energy Flow</span>
-                <span className={`text-xs px-2 py-1 rounded ${strategy === "smart"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-rose-500/20 text-rose-400"
+                <span className={`text-xs px-2 py-1 rounded border ${strategy === "smart"
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-red-50 text-red-700 border-red-200"
                     }`}>
                     {strategy === "smart" ? "Smart" : "Baseline"}
                 </span>

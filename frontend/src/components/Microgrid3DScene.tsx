@@ -35,25 +35,43 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         camera: THREE.PerspectiveCamera;
         renderer: THREE.WebGLRenderer;
         sun: THREE.Group;
+        sunLight: THREE.DirectionalLight;
+        ambientLight: THREE.AmbientLight;
+        hemiLight: THREE.HemisphereLight;
         solarPanel: THREE.Group;
         battery: THREE.Group;
         batteryLevel: THREE.Mesh;
         house: THREE.Group;
         grid: THREE.Group;
         wires: THREE.Group;
-        currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; speed: number; active: boolean }[];
+        currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; curve: THREE.CatmullRomCurve3; speed: number; active: boolean }[];
         animationId: number;
         time: number;
     } | null>(null);
 
+    // Initial Scene Setup (Runs Once)
     useEffect(() => {
         if (!containerRef.current) return;
 
-        // Scene setup with dark gradient background
+        // Cleanup previous scene if exists
+        if (sceneRef.current) {
+            try {
+                const { renderer, animationId } = sceneRef.current;
+                cancelAnimationFrame(animationId);
+                renderer.dispose();
+                if (containerRef.current.contains(renderer.domElement)) {
+                    containerRef.current.removeChild(renderer.domElement);
+                }
+            } catch (e) {
+                console.error("Cleanup error", e);
+            }
+        }
+
+        console.log("Initializing 3D Scene...");
+        // Scene setup - initial colors will be updated based on time
         const scene = new THREE.Scene();
-        const bgColor = new THREE.Color(0x0a0a1a);
-        scene.background = bgColor;
-        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+        scene.background = new THREE.Color(0x87ceeb); // Will be updated dynamically
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.008);
 
         // Camera - positioned for better view
         const camera = new THREE.PerspectiveCamera(
@@ -66,7 +84,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         camera.lookAt(0, 0, 0);
 
         // High-quality Renderer
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true }); // Removed alpha: true for solid background
         renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
@@ -76,9 +94,9 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         containerRef.current.appendChild(renderer.domElement);
 
         // ========================================
-        // LIGHTING SETUP - Realistic
+        // LIGHTING SETUP - Dynamic day/night
         // ========================================
-        const ambientLight = new THREE.AmbientLight(0x6688cc, 0.3);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffee, 1.5);
@@ -95,7 +113,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         scene.add(sunLight);
 
         // Hemisphere light for natural outdoor lighting
-        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c5c, 0.4);
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c5c, 0.6);
         scene.add(hemiLight);
 
         // ========================================
@@ -444,7 +462,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         // ========================================
         // ANIMATED CURRENT PARTICLES
         // ========================================
-        const currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; speed: number; active: boolean; offset: number }[] = [];
+        const currentParticles: { mesh: THREE.Points; path: THREE.Vector3[]; curve: THREE.CatmullRomCurve3; speed: number; active: boolean; offset: number }[] = [];
 
         const createCurrentParticles = (path: THREE.Vector3[], color: number, count: number = 15) => {
             const positions = new Float32Array(count * 3);
@@ -462,7 +480,8 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             const points = new THREE.Points(geo, mat);
             scene.add(points);
 
-            return { mesh: points, path, speed: 0.015, active: false, offset: Math.random() };
+            const curve = new THREE.CatmullRomCurve3(path);
+            return { mesh: points, path, curve, speed: 0.015, active: false, offset: Math.random() };
         };
 
         // Solar to Battery current
@@ -480,6 +499,9 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
             camera,
             renderer,
             sun,
+            sunLight,
+            ambientLight,
+            hemiLight,
             solarPanel,
             battery,
             batteryLevel,
@@ -512,7 +534,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
                 particle.mesh.visible = true;
 
                 const positions = particle.mesh.geometry.attributes.position.array as Float32Array;
-                const curve = new THREE.CatmullRomCurve3(particle.path);
+                const curve = particle.curve; // Use cached curve
                 const particleCount = positions.length / 3;
 
                 for (let i = 0; i < particleCount; i++) {
@@ -551,17 +573,113 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         };
     }, []);
 
-    // Update scene based on currentData
+    // Update scene based on currentData - including day/night cycle
     useEffect(() => {
         if (!sceneRef.current) return;
 
-        const { sun, batteryLevel, currentParticles } = sceneRef.current;
-        const isDaytime = currentData.hour >= 6 && currentData.hour <= 18;
-        const solarIntensity = currentData.solar_generation / 7;
+        const { scene, sun, sunLight, ambientLight, hemiLight, batteryLevel, currentParticles } = sceneRef.current;
+        const hour = currentData.hour;
         const batterySoC = currentData.battery_soc / 100;
 
-        // Update sun visibility
-        sun.visible = isDaytime;
+        // ========================================
+        // DAY/NIGHT CYCLE
+        // ========================================
+        // Calculate sun position and lighting based on hour
+        // Sunrise: 6am, Noon: 12pm, Sunset: 18pm
+        const sunProgress = Math.max(0, Math.min(1, (hour - 5) / 14)); // 5am to 7pm range
+        const sunAngle = sunProgress * Math.PI; // 0 to PI for sun arc
+
+        // Sun position in sky (arc from east to west)
+        const sunHeight = Math.sin(sunAngle) * 15;
+        const sunX = Math.cos(sunAngle) * 12 - 6;
+        sun.position.set(sunX, Math.max(sunHeight, -5), -8);
+        sunLight.position.set(sunX, Math.max(sunHeight + 2, 1), -5);
+
+        // Determine time of day
+        const isDaytime = hour >= 6 && hour <= 18;
+        const isDawn = hour >= 5 && hour < 7;
+        const isDusk = hour >= 17 && hour < 20;
+        const isNight = hour < 5 || hour >= 20;
+
+        // Sky colors for different times
+        let skyColor: THREE.Color;
+        let fogColor: THREE.Color;
+        let ambientIntensity: number;
+        let sunIntensity: number;
+        let hemiSkyColor: THREE.Color;
+        let hemiGroundColor: THREE.Color;
+
+        if (isNight) {
+            // Night - truly dark/black sky
+            skyColor = new THREE.Color(0x050510); // Slightly non-black for depth, or 0x000000
+            fogColor = new THREE.Color(0x050510);
+            ambientIntensity = 0.2; // Slightly brighter ambient to see houses
+            sunIntensity = 0;
+            hemiSkyColor = new THREE.Color(0x0a0a20);
+            hemiGroundColor = new THREE.Color(0x050505);
+        } else if (isDawn) {
+            // Dawn - orange/pink gradient
+            const t = (hour - 5) / 2; // 0 to 1 during dawn
+            skyColor = new THREE.Color().lerpColors(
+                new THREE.Color(0x1a1a3a),
+                new THREE.Color(0xffaa66),
+                t
+            );
+            fogColor = skyColor.clone();
+            ambientIntensity = 0.2 + t * 0.3;
+            sunIntensity = t * 1.2;
+            hemiSkyColor = new THREE.Color().lerpColors(
+                new THREE.Color(0x222244),
+                new THREE.Color(0xffcc88),
+                t
+            );
+            hemiGroundColor = new THREE.Color(0x3d4c4c);
+        } else if (isDusk) {
+            // Dusk - orange/purple gradient
+            const t = (hour - 17) / 3; // 0 to 1 during dusk
+            skyColor = new THREE.Color().lerpColors(
+                new THREE.Color(0xffaa66),
+                new THREE.Color(0x1a1a3a),
+                t
+            );
+            fogColor = skyColor.clone();
+            ambientIntensity = 0.5 - t * 0.35;
+            sunIntensity = 1.5 - t * 1.5;
+            hemiSkyColor = new THREE.Color().lerpColors(
+                new THREE.Color(0xff8866),
+                new THREE.Color(0x222244),
+                t
+            );
+            hemiGroundColor = new THREE.Color(0x3d4c4c);
+        } else {
+            // Daytime - blue sky
+            const noonProximity = 1 - Math.abs(hour - 12) / 6; // Peak at noon
+            skyColor = new THREE.Color().lerpColors(
+                new THREE.Color(0x6bb3e0),
+                new THREE.Color(0x87ceeb),
+                noonProximity
+            );
+            fogColor = skyColor.clone();
+            ambientIntensity = 0.4 + noonProximity * 0.2;
+            sunIntensity = 1.0 + noonProximity * 0.5;
+            hemiSkyColor = new THREE.Color(0x87ceeb);
+            hemiGroundColor = new THREE.Color(0x4a6a4a);
+        }
+
+        // Apply sky/lighting changes
+        scene.background = skyColor;
+        if (scene.fog instanceof THREE.FogExp2) {
+            scene.fog.color = fogColor;
+        }
+        ambientLight.intensity = ambientIntensity;
+        sunLight.intensity = sunIntensity;
+        sunLight.color.setHex(isDusk || isDawn ? 0xffaa66 : 0xffffee);
+        hemiLight.color = hemiSkyColor;
+        hemiLight.groundColor = hemiGroundColor;
+        hemiLight.intensity = ambientIntensity * 1.2;
+
+        // Sun visibility (hide below horizon)
+        sun.visible = hour >= 5 && hour <= 19 && sunHeight > -2;
 
         // Update battery level
         batteryLevel.scale.y = Math.max(0.1, batterySoC);
@@ -574,6 +692,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
         (batteryLevel.material as THREE.MeshBasicMaterial).color.setHex(batteryColor);
 
         // Activate current flows based on simulation data
+        const solarIntensity = currentData.solar_generation / 7;
         const isCharging = currentData.battery_charge > 0;
         const isDischarging = currentData.battery_discharge > 0;
         const gridActive = currentData.grid_usage > 0.1;
@@ -590,7 +709,7 @@ export default function Microgrid3DScene({ currentData }: Microgrid3DSceneProps)
     return (
         <div
             ref={containerRef}
-            className="w-full h-[350px] bg-gradient-to-b from-slate-900 to-slate-950 rounded-lg"
+            className="w-full h-[350px] rounded-lg overflow-hidden bg-black" // Added bg-black fallback
             style={{ touchAction: 'none' }}
         />
     );

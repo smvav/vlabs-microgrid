@@ -22,4 +22,5 @@ const VLabsSimulation = dynamic(() => import("@/components/VLabsSimulation"), {
 
 export default function VLabsSimulationPage() {
     return <VLabsSimulation />;
+
 }
