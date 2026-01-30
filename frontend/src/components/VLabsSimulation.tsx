@@ -14,7 +14,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle } from "lucide-react";
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Sun, Battery, Home, Zap, Settings, BarChart3, BookOpen, FlaskConical, CheckSquare, FileText, CheckCircle2, XCircle, LayoutList, Lightbulb, HelpCircle, X, Award, Leaf, TrendingUp, Target, AlertTriangle, CloudRain, BatteryWarning } from "lucide-react";
 import Microgrid3DScene from "./Microgrid3DScene";
 import EnergyFlowD3 from "./EnergyFlowD3";
 
@@ -116,17 +116,112 @@ export default function VLabsSimulation() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentHour, setCurrentHour] = useState(0);
     const [animationSpeed] = useState(1000);
+    const [showReportCard, setShowReportCard] = useState(false);
+    const [reportCardShown, setReportCardShown] = useState(false); // Track if report was already shown for this run
+
+    // Challenge/Scenario state
+    const [showChallengeModal, setShowChallengeModal] = useState(false);
+    const [selectedChallenge, setSelectedChallenge] = useState<number | null>(null);
+    const [challengeDifficulty, setChallengeDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+    const [activeChallenge, setActiveChallenge] = useState<{ id: number; difficulty: string } | null>(null);
+
+    // Challenge definitions
+    const challenges = [
+        {
+            id: 1,
+            title: "Load Shedding Emergency",
+            icon: AlertTriangle,
+            iconColor: "text-amber-500",
+            description: "The grid utility has announced scheduled load shedding (power cuts) from 6 PM to 10 PM during peak hours. You must ensure your battery has enough charge to power essential loads during this blackout period.",
+            objective: "Maintain power supply during 6 PM - 10 PM blackout",
+            difficulty: {
+                easy: { batteryCapacity: 15, initialSoC: 80, solarCapacity: 7 },
+                medium: { batteryCapacity: 10, initialSoC: 50, solarCapacity: 5 },
+                hard: { batteryCapacity: 7, initialSoC: 30, solarCapacity: 4 }
+            },
+            hints: {
+                easy: "Large battery with high charge - straightforward",
+                medium: "Balanced setup - plan your charging wisely",
+                hard: "Limited capacity - requires optimal strategy"
+            }
+        },
+        {
+            id: 2,
+            title: "Monsoon Cloudy Day",
+            icon: CloudRain,
+            iconColor: "text-blue-500",
+            description: "Heavy monsoon clouds have reduced solar generation by 60%. You must manage your energy consumption carefully and rely more on stored battery power and grid during off-peak hours.",
+            objective: "Minimize costs with severely reduced solar output",
+            difficulty: {
+                easy: { batteryCapacity: 15, initialSoC: 90, solarCapacity: 3 },
+                medium: { batteryCapacity: 10, initialSoC: 60, solarCapacity: 2 },
+                hard: { batteryCapacity: 8, initialSoC: 40, solarCapacity: 1 }
+            },
+            hints: {
+                easy: "Fully charged battery to compensate",
+                medium: "Balance grid usage with battery reserves",
+                hard: "Minimal solar and battery - every kWh counts"
+            }
+        },
+        {
+            id: 3,
+            title: "Peak Demand Surge",
+            icon: Zap,
+            iconColor: "text-red-500",
+            description: "A heatwave has caused AC usage to spike! Peak electricity prices have doubled to ₹17/kWh. Your goal is to minimize electricity costs by smartly using your battery during these expensive hours.",
+            objective: "Keep daily cost under ₹100 despite surge pricing",
+            difficulty: {
+                easy: { batteryCapacity: 20, initialSoC: 70, solarCapacity: 7, peakPrice: 12 },
+                medium: { batteryCapacity: 12, initialSoC: 50, solarCapacity: 5, peakPrice: 15 },
+                hard: { batteryCapacity: 8, initialSoC: 30, solarCapacity: 4, peakPrice: 17 }
+            },
+            hints: {
+                easy: "Large battery buffer for peak hours",
+                medium: "Strategic charging before peak period",
+                hard: "Extreme prices - maximize solar storage"
+            }
+        },
+        {
+            id: 4,
+            title: "Battery Degradation",
+            icon: BatteryWarning,
+            iconColor: "text-orange-500",
+            description: "Your battery has degraded to only 60% of its original capacity due to age. You must work with limited storage while still trying to achieve cost savings through smart scheduling.",
+            objective: "Achieve 10% cost savings with degraded battery",
+            difficulty: {
+                easy: { batteryCapacity: 8, initialSoC: 80, solarCapacity: 6 },
+                medium: { batteryCapacity: 6, initialSoC: 50, solarCapacity: 5 },
+                hard: { batteryCapacity: 4, initialSoC: 30, solarCapacity: 4 }
+            },
+            hints: {
+                easy: "Small but well-charged battery",
+                medium: "Limited capacity - time your usage",
+                hard: "Severely degraded - every cycle matters"
+            }
+        }
+    ];
 
     // Animation loop
     useEffect(() => {
         if (!isPlaying || !result) return;
 
         const interval = setInterval(() => {
-            setCurrentHour((prev) => (prev + 1) % 24);
+            setCurrentHour((prev) => {
+                if (prev === 23) {
+                    setIsPlaying(false);
+                    // Only show report card if it hasn't been shown yet for this run
+                    if (!reportCardShown) {
+                        setShowReportCard(true);
+                        setReportCardShown(true);
+                    }
+                    return 23;
+                }
+                return prev + 1;
+            });
         }, animationSpeed);
 
         return () => clearInterval(interval);
-    }, [isPlaying, result, animationSpeed]);
+    }, [isPlaying, result, animationSpeed, reportCardShown]);
 
     // Tour state
     const [runTour, setRunTour] = useState(false);
@@ -263,6 +358,7 @@ export default function VLabsSimulation() {
     // Run simulation
     const runSimulation = useCallback(async () => {
         setIsLoading(true);
+        setReportCardShown(false); // Reset so report card can show after this run completes
 
         try {
             const response = await fetch(`${API_URL}/simulate`, {
@@ -299,17 +395,116 @@ export default function VLabsSimulation() {
         }
     }, [batteryCapacity, solarCapacity, weatherMode, peakPrice, standardPrice, offPeakPrice, initialSoC, currentStep, completedSteps, generateSampleData]);
 
-    // Auto-run simulation when parameters change (debounced)
+    // Silent update - just update data without restarting animation (for parameter changes)
+    const updateSimulationData = useCallback(async () => {
+        try {
+            const response = await fetch(`${API_URL}/simulate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    battery_capacity_kwh: batteryCapacity,
+                    solar_capacity_kw: solarCapacity,
+                    weather_mode: weatherMode,
+                    off_peak_price: offPeakPrice,
+                    standard_price: standardPrice,
+                    peak_price: peakPrice,
+                    initial_soc: initialSoC / 100,
+                }),
+            });
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+            const data: SimulationResult = await response.json();
+            setResult(data);
+            // Don't reset hour or start playing - just update the data
+        } catch (err) {
+            console.error("Simulation update error:", err);
+            // Generate sample data silently
+            const generateHourlyData = (isBaseline: boolean): HourlyData[] => {
+                const data: HourlyData[] = [];
+                let soc = initialSoC;
+
+                for (let hour = 0; hour < 24; hour++) {
+                    const solar = hour >= 6 && hour <= 18
+                        ? solarCapacity * Math.exp(-0.5 * Math.pow((hour - 12) / 3, 2))
+                        : 0;
+                    const load = [1.5, 1.5, 1.5, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 3.5, 3.0, 2.5, 2.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 7.0, 6.5, 5.5, 4.0, 2.5][hour];
+                    const isPeak = hour >= 14 && hour < 22;
+                    const price = isPeak ? peakPrice : offPeakPrice;
+
+                    let gridUsage = 0;
+                    let batteryCharge = 0;
+                    let batteryDischarge = 0;
+
+                    if (isBaseline) {
+                        gridUsage = Math.max(0, load - solar);
+                    } else {
+                        const deficit = load - solar;
+                        if (deficit < 0 && soc < 100) {
+                            batteryCharge = Math.min(-deficit * 0.95, (100 - soc) / 100 * batteryCapacity);
+                            soc += batteryCharge / batteryCapacity * 100;
+                        } else if (deficit > 0 && isPeak && soc > 20) {
+                            batteryDischarge = Math.min(deficit, (soc - 20) / 100 * batteryCapacity * 0.95);
+                            soc -= batteryDischarge / batteryCapacity * 100;
+                            gridUsage = Math.max(0, deficit - batteryDischarge);
+                        } else {
+                            gridUsage = Math.max(0, deficit);
+                        }
+                    }
+
+                    data.push({
+                        hour,
+                        solar_generation: Math.round(solar * 100) / 100,
+                        load_demand: Math.round(load * 100) / 100,
+                        battery_soc: Math.round(soc * 10) / 10,
+                        grid_usage: Math.round(gridUsage * 100) / 100,
+                        battery_charge: Math.round(batteryCharge * 100) / 100,
+                        battery_discharge: Math.round(batteryDischarge * 100) / 100,
+                        hourly_cost: Math.round(gridUsage * price * 100) / 100,
+                        is_peak_hour: isPeak,
+                    });
+                }
+
+                return data;
+            };
+
+            const baseline = generateHourlyData(true);
+            const smart = generateHourlyData(false);
+
+            const baselineCost = baseline.reduce((sum, d) => sum + d.hourly_cost, 0);
+            const smartCost = smart.reduce((sum, d) => sum + d.hourly_cost, 0);
+            const baselineGrid = baseline.reduce((sum, d) => sum + d.grid_usage, 0);
+            const smartGrid = smart.reduce((sum, d) => sum + d.grid_usage, 0);
+
+            setResult({
+                baseline_data: baseline,
+                smart_data: smart,
+                summary: {
+                    baseline_total_cost: Math.round(baselineCost * 100) / 100,
+                    smart_total_cost: Math.round(smartCost * 100) / 100,
+                    cost_saved: Math.round((baselineCost - smartCost) * 100) / 100,
+                    cost_saved_percent: Math.round((baselineCost - smartCost) / baselineCost * 1000) / 10,
+                    baseline_grid_usage: Math.round(baselineGrid * 100) / 100,
+                    smart_grid_usage: Math.round(smartGrid * 100) / 100,
+                    grid_reduced: Math.round((baselineGrid - smartGrid) * 100) / 100,
+                    grid_reduced_percent: Math.round((baselineGrid - smartGrid) / baselineGrid * 1000) / 10,
+                    battery_capacity_kwh: batteryCapacity,
+                },
+            });
+        }
+    }, [batteryCapacity, solarCapacity, weatherMode, peakPrice, standardPrice, offPeakPrice, initialSoC]);
+
+    // Auto-run simulation when parameters change (debounced) - silent update only
     useEffect(() => {
         if (!result) return; // Only auto-update if simulation has been run at least once
 
         const timeoutId = setTimeout(() => {
-            runSimulation();
+            updateSimulationData(); // Use silent update instead of full runSimulation
         }, 500); // 500ms debounce
 
         return () => clearTimeout(timeoutId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [batteryCapacity, solarCapacity, weatherMode, offPeakPrice, standardPrice, peakPrice, initialSoC, runSimulation]);
+    }, [batteryCapacity, solarCapacity, weatherMode, offPeakPrice, standardPrice, peakPrice, initialSoC, updateSimulationData]);
 
     // Handle step navigation
     const nextStep = () => {
@@ -346,8 +541,306 @@ export default function VLabsSimulation() {
         ? (activeStrategy === "smart" ? result.smart_data : result.baseline_data)
         : [];
 
+    // Calculate report card metrics
+    const getReportCardData = () => {
+        if (!result || activeData.length === 0) return null;
+
+        const totalCost = activeData.reduce((sum, h) => sum + h.hourly_cost, 0);
+        const totalSolar = activeData.reduce((sum, h) => sum + h.solar_generation, 0);
+        const totalGrid = activeData.reduce((sum, h) => sum + h.grid_usage, 0);
+        const totalLoad = activeData.reduce((sum, h) => sum + h.load_demand, 0);
+
+        // CO2 saved: ~0.82 kg CO2 per kWh of solar used instead of grid (India avg)
+        const co2Saved = totalSolar * 0.82;
+
+        // Self-sufficiency: (Solar Used / Total Load) * 100
+        const selfSufficiency = Math.min(100, (totalSolar / totalLoad) * 100);
+
+        // Eco-Score Grade based on self-sufficiency and cost savings
+        const costSavingsPercent = result.summary.cost_saved_percent;
+        const avgScore = (selfSufficiency + costSavingsPercent) / 2;
+
+        let grade: string;
+        let gradeColor: string;
+        if (avgScore >= 40) { grade = 'A'; gradeColor = 'text-green-500'; }
+        else if (avgScore >= 30) { grade = 'B'; gradeColor = 'text-blue-500'; }
+        else if (avgScore >= 20) { grade = 'C'; gradeColor = 'text-yellow-500'; }
+        else if (avgScore >= 10) { grade = 'D'; gradeColor = 'text-orange-500'; }
+        else { grade = 'F'; gradeColor = 'text-red-500'; }
+
+        // Tips based on performance
+        const tips: string[] = [];
+        if (selfSufficiency < 50) {
+            tips.push("Try increasing your solar panel capacity to generate more clean energy during daylight hours.");
+        }
+        if (totalGrid > totalSolar) {
+            tips.push("Consider a larger battery to store excess solar and reduce grid dependency during peak hours.");
+        }
+        if (costSavingsPercent < 15) {
+            tips.push("Switch to the Smart strategy to optimize battery usage during peak pricing hours.");
+        }
+
+        return {
+            totalCost,
+            totalSolar,
+            totalGrid,
+            co2Saved,
+            selfSufficiency,
+            grade,
+            gradeColor,
+            tips: tips.length > 0 ? tips : ["Great job! Your system is well optimized."]
+        };
+    };
+
+    const reportData = getReportCardData();
+
+    // Start a challenge with selected difficulty
+    const startChallenge = () => {
+        if (selectedChallenge === null) return;
+        const challenge = challenges.find(c => c.id === selectedChallenge);
+        if (!challenge) return;
+
+        const difficultySettings = challenge.difficulty[challengeDifficulty];
+        setBatteryCapacity(difficultySettings.batteryCapacity);
+        setInitialSoC(difficultySettings.initialSoC);
+        setSolarCapacity(difficultySettings.solarCapacity);
+        if ('peakPrice' in difficultySettings) {
+            setPeakPrice(difficultySettings.peakPrice as number);
+        }
+        if (challenge.id === 2) {
+            setWeatherMode("cloudy");
+        } else {
+            setWeatherMode("sunny");
+        }
+
+        setActiveChallenge({ id: selectedChallenge, difficulty: challengeDifficulty });
+        setShowChallengeModal(false);
+        setCurrentHour(0);
+        setResult(null);
+
+        // Auto-run simulation after setting up
+        setTimeout(() => {
+            runSimulation();
+        }, 100);
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* Challenge Selection Modal */}
+            {showChallengeModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                                <Target className="w-5 h-5 text-blue-600" />
+                                <h2 className="font-bold text-slate-900">Select Challenge</h2>
+                            </div>
+                            <button
+                                onClick={() => setShowChallengeModal(false)}
+                                className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-400" />
+                            </button>
+                        </div>
+
+                        {/* Challenge List or Challenge Detail */}
+                        {selectedChallenge === null ? (
+                            <div className="p-4 space-y-3">
+                                {challenges.map((challenge) => (
+                                    <button
+                                        key={challenge.id}
+                                        onClick={() => setSelectedChallenge(challenge.id)}
+                                        className="w-full p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-left group"
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`p-2 rounded-lg bg-slate-100 group-hover:bg-white ${challenge.iconColor}`}>
+                                                <challenge.icon className="w-5 h-5" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="font-semibold text-slate-900 group-hover:text-blue-700">{challenge.title}</h3>
+                                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{challenge.description}</p>
+                                            </div>
+                                            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500" />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-4">
+                                {(() => {
+                                    const challenge = challenges.find(c => c.id === selectedChallenge)!;
+                                    return (
+                                        <div className="space-y-4">
+                                            {/* Back button */}
+                                            <button
+                                                onClick={() => setSelectedChallenge(null)}
+                                                className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1"
+                                            >
+                                                <ChevronLeft className="w-4 h-4" /> Back to challenges
+                                            </button>
+
+                                            {/* Challenge Header */}
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg bg-slate-100 ${challenge.iconColor}`}>
+                                                    <challenge.icon className="w-6 h-6" />
+                                                </div>
+                                                <h3 className="text-lg font-bold text-slate-900">{challenge.title}</h3>
+                                            </div>
+
+                                            {/* Description */}
+                                            <p className="text-sm text-slate-600 leading-relaxed">
+                                                {challenge.description}
+                                            </p>
+
+                                            {/* Objective */}
+                                            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <Target className="w-4 h-4 text-blue-600" />
+                                                    <span className="font-semibold text-slate-700">Objective</span>
+                                                </div>
+                                                <p className="text-sm text-slate-600 mt-1 ml-6">{challenge.objective}</p>
+                                            </div>
+
+                                            {/* Difficulty Selection */}
+                                            <div>
+                                                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                                                    Select Difficulty
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {(["easy", "medium", "hard"] as const).map((diff) => (
+                                                        <button
+                                                            key={diff}
+                                                            onClick={() => setChallengeDifficulty(diff)}
+                                                            className={`py-2 px-4 rounded-lg text-sm font-medium capitalize transition-all border ${challengeDifficulty === diff
+                                                                ? "bg-blue-600 text-white border-blue-600"
+                                                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                                                }`}
+                                                        >
+                                                            {diff}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <p className="text-xs text-blue-600 mt-2">
+                                                    {challenge.hints[challengeDifficulty]}
+                                                </p>
+                                            </div>
+
+                                            {/* Start Button */}
+                                            <button
+                                                onClick={startChallenge}
+                                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                            >
+                                                <Play className="w-4 h-4 fill-current" />
+                                                Start Mission
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Report Card Modal */}
+            {showReportCard && reportData && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-3 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                                <Award className="w-4 h-4 text-blue-600" />
+                                <h2 className="font-bold text-slate-900 text-sm">Simulation Complete - Report Card</h2>
+                            </div>
+                            <button
+                                onClick={() => setShowReportCard(false)}
+                                className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                            >
+                                <X className="w-4 h-4 text-slate-400" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4 space-y-4">
+                            {/* Eco-Score Grade */}
+                            <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Eco-Score Grade</div>
+                                <div className={`text-5xl font-black ${reportData.gradeColor}`}>
+                                    {reportData.grade}
+                                </div>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                                    <div className="flex items-center gap-1 text-amber-600 text-[10px] font-medium mb-0.5">
+                                        <Zap className="w-3 h-3" /> TOTAL COST
+                                    </div>
+                                    <div className="text-lg font-bold text-slate-900">₹{reportData.totalCost.toFixed(2)}</div>
+                                </div>
+                                <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-100">
+                                    <div className="flex items-center gap-1 text-yellow-600 text-[10px] font-medium mb-0.5">
+                                        <Sun className="w-3 h-3" /> SOLAR USED
+                                    </div>
+                                    <div className="text-lg font-bold text-slate-900">{reportData.totalSolar.toFixed(1)} kWh</div>
+                                </div>
+                                <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+                                    <div className="flex items-center gap-1 text-indigo-600 text-[10px] font-medium mb-0.5">
+                                        <Home className="w-3 h-3" /> GRID USED
+                                    </div>
+                                    <div className="text-lg font-bold text-slate-900">{reportData.totalGrid.toFixed(1)} kWh</div>
+                                </div>
+                                <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                                    <div className="flex items-center gap-1 text-emerald-600 text-[10px] font-medium mb-0.5">
+                                        <Leaf className="w-3 h-3" /> CO₂ SAVED
+                                    </div>
+                                    <div className="text-lg font-bold text-slate-900">{reportData.co2Saved.toFixed(1)} kg</div>
+                                </div>
+                            </div>
+
+                            {/* Self-Sufficiency */}
+                            <div className="bg-cyan-50 rounded-lg p-3 border border-cyan-100 text-center">
+                                <div className="flex items-center justify-center gap-1 text-cyan-600 text-[10px] font-medium mb-1">
+                                    <TrendingUp className="w-3 h-3" /> SELF-SUFFICIENCY RATE
+                                </div>
+                                <div className="text-2xl font-bold text-cyan-700">{reportData.selfSufficiency.toFixed(1)}%</div>
+                            </div>
+
+                            {/* Tips */}
+                            <div className="bg-amber-50/50 rounded-lg p-3 border border-amber-100">
+                                <div className="flex items-center gap-2 text-amber-700 text-xs font-semibold mb-1">
+                                    <Lightbulb className="w-3 h-3" /> Tips for Improvement
+                                </div>
+                                <ul className="space-y-0.5">
+                                    {reportData.tips.map((tip, i) => (
+                                        <li key={i} className="text-[11px] text-slate-600 flex items-start gap-1">
+                                            <span className="text-amber-500 mt-0.5">•</span>
+                                            {tip}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-3 border-t border-slate-100">
+                            <button
+                                onClick={() => {
+                                    setShowReportCard(false);
+                                    setCurrentHour(0);
+                                    setIsPlaying(true);
+                                }}
+                                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                                Try Again
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Joyride
                 steps={tourSteps}
                 run={runTour}
@@ -612,6 +1105,28 @@ export default function VLabsSimulation() {
                                         </>
                                     )}
                                 </button>
+
+                                {/* Challenge Mode Button */}
+                                <button
+                                    onClick={() => {
+                                        setSelectedChallenge(null);
+                                        setShowChallengeModal(true);
+                                    }}
+                                    className="w-full py-2 rounded-lg text-sm font-medium border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Target className="w-4 h-4" />
+                                    Try a Challenge
+                                </button>
+                                {activeChallenge && (
+                                    <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                                        <div className="flex items-center gap-1.5">
+                                            <Target className="w-3 h-3" />
+                                            <span className="font-medium">Active: </span>
+                                            {challenges.find(c => c.id === activeChallenge.id)?.title}
+                                            <span className="text-blue-500 capitalize ml-1">({activeChallenge.difficulty})</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Strategy Toggle */}
@@ -643,7 +1158,7 @@ export default function VLabsSimulation() {
                         </div>
 
                         {/* Center - 3D Visualization */}
-                        <div className="lg:col-span-5">
+                        <div className="lg:col-span-6 space-y-4">
                             <div id="tour-live-view" className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
                                 <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -701,14 +1216,11 @@ export default function VLabsSimulation() {
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Right - D3 Charts & Stats */}
-                        <div id="tour-stats-charts" className="lg:col-span-4 space-y-4">
-                            {/* Current Stats */}
+                            {/* Current Stats Below Visualization */}
                             <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
                                 <h3 className="text-sm font-semibold text-slate-900 mb-3">Current Statistics</h3>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-4 gap-3">
                                     <StatCard
                                         icon={<Sun className="w-4 h-4" />}
                                         label="Solar"
@@ -739,8 +1251,104 @@ export default function VLabsSimulation() {
                                     />
                                 </div>
                             </div>
+                        </div>
 
-                            {/* D3 Energy Flow Chart */}
+                        {/* Right - Bill & Battery Status */}
+                        <div id="tour-stats-charts" className="lg:col-span-3 space-y-4">
+                            {/* Electricity Bill Card */}
+                            <div className="bg-red-50 rounded-lg border border-red-100 p-4 shadow-sm">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="text-xs font-semibold text-red-800 uppercase tracking-wider">Electricity Bill</h3>
+                                    <span className="text-[10px] text-red-600 flex items-center gap-1">
+                                        <Zap className="w-3 h-3" /> Using Grid
+                                    </span>
+                                </div>
+                                <div className="text-center py-4">
+                                    <div className="text-3xl font-bold text-red-600">
+                                        {/* Real-time cumulative bill calculation */}
+                                        ₹{activeData.slice(0, currentHour + 1).reduce((sum, h) => sum + h.hourly_cost, 0).toFixed(2)}
+                                    </div>
+                                    <div className="text-xs text-red-400 mt-1">Real-time Bill</div>
+                                </div>
+                                <div className="flex justify-between items-center pt-3 border-t border-red-100 text-xs">
+                                    <div>
+                                        <div className="text-red-400 font-medium">Current Tariff</div>
+                                        <div className="text-red-700 font-bold">₹{(currentData.is_peak_hour ? peakPrice : offPeakPrice).toFixed(2)}/kWh</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-red-400 font-medium">Grid Power</div>
+                                        <div className="text-red-700 font-bold">{currentData.grid_usage.toFixed(2)} kW</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Battery Status Card */}
+                            <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Battery Status</h3>
+                                    {currentData.battery_charge > 0 ? (
+                                        <span className="text-xs font-bold text-emerald-600 animate-pulse flex items-center gap-1">
+                                            ↓ Charging
+                                        </span>
+                                    ) : currentData.battery_discharge > 0 ? (
+                                        <span className="text-xs font-bold text-amber-600 animate-pulse flex items-center gap-1">
+                                            ↑ Discharging
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs font-bold text-slate-400">Idle</span>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-col items-center justify-center">
+                                    {/* Visual Battery */}
+                                    <div className="w-16 h-28 border-4 border-slate-300 rounded-lg relative mb-4 bg-slate-50">
+                                        {/* Positive Terminal */}
+                                        <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-2 bg-slate-300 rounded-t-sm"></div>
+
+                                        {/* Fill Level Container */}
+                                        <div className="absolute inset-1 rounded overflow-hidden">
+                                            {/* Fill Level */}
+                                            <div
+                                                className={`w-full absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-sm ${currentData.battery_soc > 20 ? "bg-emerald-400" : "bg-red-400"}`}
+                                                style={{ height: `${Math.min(100, Math.max(0, currentData.battery_soc))}%` }}
+                                            >
+                                                {currentData.battery_charge > 0 && (
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/30 animate-pulse"></div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Low Battery Warning */}
+                                        {currentData.battery_soc < 20 && (
+                                            <div className="absolute inset-0 flex items-center justify-center z-10">
+                                                <span className="text-xl font-bold text-red-600 animate-bounce">!</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="text-3xl font-bold text-slate-800 mb-1">
+                                        {currentData.battery_soc.toFixed(1)}%
+                                    </div>
+                                    <div className="text-xs text-slate-500 uppercase tracking-wide font-medium">State of Charge</div>
+
+                                    <div className="w-full grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-100">
+                                        <div className="text-center">
+                                            <div className="text-xs text-slate-400 mb-1">Capacity</div>
+                                            <div className="text-sm font-bold text-slate-700">{batteryCapacity} kWh</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xs text-slate-400 mb-1">Power Flow</div>
+                                            <div className={`text-sm font-bold ${currentData.battery_charge > 0 ? "text-emerald-600" :
+                                                currentData.battery_discharge > 0 ? "text-amber-600" : "text-slate-700"
+                                                }`}>
+                                                {(currentData.battery_charge || currentData.battery_discharge).toFixed(2)} kW
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* D3 Energy Flow Chart (kept mini) */}
                             <div className="bg-white rounded-lg border border-slate-200 p-1 overflow-hidden shadow-sm">
                                 <EnergyFlowD3
                                     data={activeData}
